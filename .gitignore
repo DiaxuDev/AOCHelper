@@ -1,6 +1,5 @@
 node_modules
 
-days/
-archive/
+**/input*.txt
 
 .env
