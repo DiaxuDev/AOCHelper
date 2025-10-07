@@ -8,14 +8,28 @@ import { readFileSync } from "fs";
  * @param {Boolean} [test=false]
  * @returns {void}
  */
-export default function (runner, day, part, test = false) {
+export default async function (runner, day, part, test = false) {
 	const start = performance.now();
-	const output = runner(readFileSync(`./days/${day}/input${test ? ".test" : ""}.txt`, "utf-8").split("\n"));
+	const output = await runner(
+		readFileSync(
+			`./days/${day}/input${test ? ".test" : ""}.txt`,
+			"utf-8"
+		).split("\n")
+	);
 
 	Object.prototype.toString = function () {
 		return JSON.stringify(this, "", 2);
 	};
 
-	console.log(chalk.green("Day ") + chalk.blue(day) + chalk.green(", part ") + chalk.blue(part) + chalk.green(" result: ") + chalk.gray(output));
-	console.log(chalk.gray("Time elapsed: ") + chalk.blue(performance.now() - start + "ms"));
+	console.log(
+		chalk.green("Day ") +
+			chalk.blue(day) +
+			chalk.green(", part ") +
+			chalk.blue(part) +
+			chalk.green(" result: ") +
+			chalk.gray(output)
+	);
+	console.log(
+		chalk.gray("Time elapsed: ") + chalk.blue(performance.now() - start + "ms")
+	);
 }
