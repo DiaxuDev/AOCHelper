@@ -1,0 +1,37 @@
+{
+	"name": "aoc-framework",
+	"version": "1.0.0",
+	"description": "Framework for bootstraping and running typescript advent of code solutions",
+	"type": "module",
+	"author": "DiaxuDev <diaxman.gameplay@gmail.com>",
+	"license": "MIT",
+	"keywords": [
+		"aoc",
+		"advent",
+		"advent of code"
+	],
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"bin": {
+		"aoc": "./aoc.mjs"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"dev": "tsdown --watch"
+	},
+	"devDependencies": {
+		"tsdown": "^0.16.7"
+	},
+	"packageManager": "pnpm@10.18.1",
+	"dependencies": {
+		"cac": "^6.7.14",
+		"chokidar": "^4.0.3",
+		"dotenv": "^17.2.3",
+		"jiti": "^2.6.1",
+		"tinyrainbow": "^3.0.3"
+	}
+}
