@@ -25,7 +25,7 @@ run(
 		}
 
 		// simulate long computation
-		for (let i = 0; i < 6_000_000_000; i++) {}
+		for (let i = 0; i < 4_000_000_000; i++) {}
 
 		return sum;
 	},

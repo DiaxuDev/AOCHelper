@@ -15,6 +15,7 @@ import {
 	SCROLLABLE_REGION,
 	SHOW_CURSOR,
 } from "../constants";
+import { RunnerState } from "../runner/runner";
 import { formatTime } from "../utils";
 
 export class Logger {
@@ -52,13 +53,14 @@ export class Logger {
 		if (!this.stdout.isTTY || !this.ctx.runner) return;
 
 		let message = "";
-		message += this.ctx.runner.running
-			? c.green("\u25B6") + " " + c.dim("Running for: ")
-			: c.dim("\u23F8 Completed in: ");
+		message +=
+			this.ctx.runner.state === RunnerState.RUNNING
+				? c.green("\u25B6") + " " + c.dim("Running for: ")
+				: c.dim("\u23F8 Completed in: ");
 
 		message += formatTime(performance.now() - this.ctx.runner.startedAt);
 
-		this.console.log(performance.now() - this.ctx.runner.startedAt);
+		if (this.ctx.runner.answer) message += " " + c.dim("Answer: ") + c.green(this.ctx.runner.answer);
 
 		this.stdout.write(SAVE_CURSOR + CURSOR_TO(this.stdout.rows, 0) + message + CLEAR_TO_END + RESTORE_CURSOR);
 	}

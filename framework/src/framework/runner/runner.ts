@@ -1,34 +1,66 @@
+import { ChildProcess, fork } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { join, resolve } from "node:path";
 import { Framework, PuzzleIdentifier } from "@/index";
-import { createJiti, Jiti } from "jiti";
 
-import { setRunnerContext } from ".";
-import { withBadge } from "../logger";
-import { createCustomConsole } from "./worker/console";
+import { DIST_DIR } from "../constants";
+import { WorkerMessage, WorkerRequest } from "./worker/types";
+
+export enum RunnerState {
+	IDLE,
+	STARTING,
+	STARTED,
+	RUNNING,
+}
 
 export class Runner {
 	private ctx: Framework;
 	public puzzle: PuzzleIdentifier;
-	public running: boolean = false;
-	public startedAt: number = 0;
-	public input?: string;
+	public state: RunnerState = RunnerState.IDLE;
 	public answer?: number;
-	public fileName: string;
+	public startedAt: number = 0;
+	private input?: string;
+	public path: string;
 	public testMode;
 
-	private jiti?: Jiti;
+	private worker?: ChildProcess;
 	private runningPromise?: Promise<void>;
 
 	constructor(ctx: Framework, puzzle: PuzzleIdentifier) {
 		this.ctx = ctx;
 		this.testMode = ctx.config.defaultRunMode === "test";
 		this.puzzle = puzzle;
-		this.fileName = `./part${this.puzzle.part === 1 ? "One" : "Two"}.ts`;
-		this.jiti = createJiti(pathToFileURL(this.getDir()).href, {
-			moduleCache: false,
+		this.path = join(
+			`day${this.puzzle.day.toString().padStart(2, "0")}`,
+			`./part${this.puzzle.part === 1 ? "One" : "Two"}.ts`,
+		);
+	}
+
+	public async init() {
+		if (this.state === RunnerState.STARTED || this.state === RunnerState.RUNNING) return;
+
+		this.state = RunnerState.STARTING;
+		this.worker ||= fork(resolve(DIST_DIR, "worker.js"));
+
+		this.ctx.addExitHook(() => this.worker?.kill());
+
+		this.worker.send({ type: "start", ctx: { basePath: this.ctx.ensureEffectiveRoot() } } as WorkerRequest);
+
+		// TODO: I should probably add a timeout to this
+		await Promise.all([this.awaitStart(), this.loadInput()]);
+		this.state = RunnerState.STARTED;
+	}
+
+	private async awaitStart() {
+		return new Promise<void>((resolve, reject) => {
+			const onStart = (message: WorkerMessage) => {
+				if (message.type !== "started") return;
+				this.worker?.removeListener("message", onStart);
+				resolve();
+			};
+
+			this.worker?.addListener("message", onStart);
 		});
 	}
 
@@ -48,19 +80,32 @@ export class Runner {
 		if (this.runningPromise) await this.runningPromise;
 
 		this.runningPromise = (async () => {
-			assert(this.jiti, "Runner.runingPromise:jiti");
+			assert(this.worker, "Runner.runingPromise:worker");
 
-			const cleanup = this.setupEnvironment();
 			let interval: NodeJS.Timeout | undefined;
 
 			try {
-				this.running = true;
+				this.state = RunnerState.RUNNING;
 				this.startedAt = performance.now();
 				this.ctx.logger.updateStatusLine();
 
 				interval = setInterval(() => this.ctx.logger.updateStatusLine(), 100).unref();
 
-				await this.jiti.import(this.fileName);
+				const msg: WorkerRequest = { type: "run", data: { input: this.input!, path: "./" + this.path } };
+				this.worker.send(msg);
+
+				const resultPromise = new Promise<number>((resolve) => {
+					const onFinish = (message: WorkerMessage) => {
+						if (message.type !== "finished") return;
+
+						this.worker?.removeListener("message", onFinish);
+						resolve(message.answer);
+					};
+
+					this.worker?.addListener("message", onFinish);
+				});
+
+				this.answer = await resultPromise;
 			} catch (error) {
 				this.ctx.logger.error("Error during puzzle execution:", error);
 			} finally {
@@ -69,11 +114,9 @@ export class Runner {
 					interval = undefined;
 				}
 
-				this.running = false;
+				this.state = RunnerState.STARTED;
 				this.ctx.logger.updateStatusLine();
 				this.startedAt = 0; // We have to defer unsetting startedAt because status line depends on it
-
-				cleanup();
 			}
 		})().finally(() => {
 			this.runningPromise = undefined;
@@ -82,30 +125,12 @@ export class Runner {
 		await this.runningPromise;
 	}
 
-	public handleConsole(data: any, type: "stdout" | "stderr" = "stdout") {
-		if (type === "stdout") this.ctx.logger.log(withBadge("yellow", "STDIN"), data);
-		else this.ctx.logger.error(withBadge("magenta", "STDERR"), data);
-	}
-
 	public getDir() {
 		const path = join(this.ctx.ensureEffectiveRoot(), `day${this.puzzle.day.toString().padStart(2, "0")}`);
 		if (!existsSync(path)) {
 			throw new Error(`Day ${this.puzzle.day} does not exist at path: ${path}`);
 		}
 		return path;
-	}
-
-	private setupEnvironment() {
-		const console = globalThis.console;
-
-		setRunnerContext(this);
-		globalThis.console = createCustomConsole(this);
-
-		const cleanup = () => {
-			globalThis.console = console;
-		};
-
-		return cleanup;
 	}
 }
 
