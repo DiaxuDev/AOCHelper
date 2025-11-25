@@ -24,7 +24,7 @@
 		"dev": "tsdown --watch"
 	},
 	"devDependencies": {
-		"tsdown": "^0.16.5"
+		"tsdown": "^0.16.7"
 	},
 	"packageManager": "pnpm@10.18.1",
 	"dependencies": {

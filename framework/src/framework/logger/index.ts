@@ -36,6 +36,8 @@ export class Logger {
 			);
 
 			this.updateStatusLine();
+
+			ctx.addExitHook(() => this.log(c.red("Exiting...")));
 		}
 		this.registerExitHandlers();
 		this.registerUnhandledRejectionHandler();
@@ -52,15 +54,17 @@ export class Logger {
 	public updateStatusLine() {
 		if (!this.stdout.isTTY || !this.ctx.runner) return;
 
-		let message = "";
-		message +=
-			this.ctx.runner.state === RunnerState.RUNNING
-				? c.green("\u25B6") + " " + c.dim("Running for: ")
-				: c.dim("\u23F8 Completed in: ");
+		const icon = this.ctx.runner.state === RunnerState.RUNNING ? c.green("\u25B6") : c.dim("\u23F8");
 
-		message += formatTime(performance.now() - this.ctx.runner.startedAt);
+		const time =
+			(this.ctx.runner.state === RunnerState.RUNNING ? "Running for: " : "Completed in: ") +
+			formatTime(performance.now() - this.ctx.runner.startedAt);
 
-		if (this.ctx.runner.answer) message += " " + c.dim("Answer: ") + c.green(this.ctx.runner.answer);
+		const mode = this.ctx.runner.testMode ? c.yellow("Test mode") : c.blue("Real mode");
+
+		const answer = this.ctx.runner.answer ? "Answer: " + c.green(this.ctx.runner.answer) : "";
+
+		const message = icon + " " + [time, mode, answer].filter((part) => part.length > 0).join(c.dim(" | "));
 
 		this.stdout.write(SAVE_CURSOR + CURSOR_TO(this.stdout.rows, 0) + message + CLEAR_TO_END + RESTORE_CURSOR);
 	}
@@ -104,7 +108,6 @@ export class Logger {
 			this.stderr.write("\n\n");
 			process.exit();
 		};
-
 		process.on("unhandledRejection", onUnhandledRejection);
 		this.ctx.addExitHook(() => {
 			process.off("unhandledRejection", onUnhandledRejection);
@@ -114,7 +117,14 @@ export class Logger {
 
 export function hijackTTY(ctx: Framework) {
 	function onKeyPress(_str: string, key: Key) {
-		if (key.name === "q" || (key.ctrl && key.name === "c")) ctx.exit();
+		if (key.name === "q" || (key.ctrl && key.name === "c")) {
+			ctx.exit();
+		} else if (key.name === "r") {
+			ctx.logger.log("Restarting the current puzzle...");
+			void ctx.runner?.run();
+		} else if (key.name === "t") {
+			void ctx.runner?.toggleTestMode();
+		}
 	}
 
 	const rl = createInterface({

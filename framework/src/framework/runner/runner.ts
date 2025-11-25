@@ -1,8 +1,10 @@
 import { ChildProcess, fork } from "node:child_process";
+import { clear } from "node:console";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Framework, PuzzleIdentifier } from "@/index";
+import c from "tinyrainbow";
 
 import { DIST_DIR } from "../constants";
 import { WorkerMessage, WorkerRequest } from "./worker/types";
@@ -25,7 +27,7 @@ export class Runner {
 	public testMode;
 
 	private worker?: ChildProcess;
-	private runningPromise?: Promise<void>;
+	private timerInterval?: NodeJS.Timeout;
 
 	constructor(ctx: Framework, puzzle: PuzzleIdentifier) {
 		this.ctx = ctx;
@@ -45,11 +47,28 @@ export class Runner {
 
 		this.ctx.addExitHook(() => this.worker?.kill());
 
+		this.worker.on("message", this.onWorkerMessage.bind(this));
+
 		this.worker.send({ type: "start", ctx: { basePath: this.ctx.ensureEffectiveRoot() } } as WorkerRequest);
 
 		// TODO: I should probably add a timeout to this
-		await Promise.all([this.awaitStart(), this.loadInput()]);
+		await this.awaitStart();
 		this.state = RunnerState.STARTED;
+	}
+
+	private stop() {
+		if (this.worker) {
+			this.worker.kill();
+			this.worker.removeAllListeners();
+			this.worker = undefined;
+		}
+
+		if (this.timerInterval) {
+			clearInterval(this.timerInterval);
+			this.timerInterval = undefined;
+		}
+
+		this.state = RunnerState.IDLE;
 	}
 
 	private async awaitStart() {
@@ -64,6 +83,15 @@ export class Runner {
 		});
 	}
 
+	public async toggleTestMode(testMode?: boolean) {
+		const newTestMode = testMode ?? !this.testMode;
+		if (this.testMode === newTestMode) return;
+
+		this.testMode = newTestMode;
+		await this.loadInput();
+		this.run();
+	}
+
 	public async loadInput() {
 		const fileName = this.testMode ? "input.test.txt" : "input.txt";
 		const path = join(this.getDir(), fileName);
@@ -75,54 +103,36 @@ export class Runner {
 
 	public async run() {
 		assert(this.input, "Runner.run:input");
+		assert(this.worker, "Runner.run:worker");
 
-		// Prevent multiple runs at the same time
-		if (this.runningPromise) await this.runningPromise;
+		if (this.state === RunnerState.RUNNING) {
+			this.stop();
+			await this.init();
+		}
 
-		this.runningPromise = (async () => {
-			assert(this.worker, "Runner.runingPromise:worker");
+		this.state = RunnerState.RUNNING;
+		this.startedAt = performance.now();
+		this.ctx.logger.updateStatusLine();
 
-			let interval: NodeJS.Timeout | undefined;
+		this.timerInterval = setInterval(() => this.ctx.logger.updateStatusLine(), 100).unref();
 
-			try {
-				this.state = RunnerState.RUNNING;
-				this.startedAt = performance.now();
-				this.ctx.logger.updateStatusLine();
+		const msg: WorkerRequest = { type: "run", data: { input: this.input, path: "./" + this.path } };
+		this.worker.send(msg);
+	}
 
-				interval = setInterval(() => this.ctx.logger.updateStatusLine(), 100).unref();
+	private onWorkerMessage(message: WorkerMessage) {
+		if (message.type !== "finished") return;
 
-				const msg: WorkerRequest = { type: "run", data: { input: this.input!, path: "./" + this.path } };
-				this.worker.send(msg);
+		this.answer = message.answer;
 
-				const resultPromise = new Promise<number>((resolve) => {
-					const onFinish = (message: WorkerMessage) => {
-						if (message.type !== "finished") return;
+		if (this.timerInterval) {
+			clearInterval(this.timerInterval);
+			this.timerInterval = undefined;
+		}
 
-						this.worker?.removeListener("message", onFinish);
-						resolve(message.answer);
-					};
-
-					this.worker?.addListener("message", onFinish);
-				});
-
-				this.answer = await resultPromise;
-			} catch (error) {
-				this.ctx.logger.error("Error during puzzle execution:", error);
-			} finally {
-				if (interval) {
-					clearInterval(interval);
-					interval = undefined;
-				}
-
-				this.state = RunnerState.STARTED;
-				this.ctx.logger.updateStatusLine();
-				this.startedAt = 0; // We have to defer unsetting startedAt because status line depends on it
-			}
-		})().finally(() => {
-			this.runningPromise = undefined;
-		});
-
-		await this.runningPromise;
+		this.state = RunnerState.STARTED;
+		this.ctx.logger.updateStatusLine();
+		this.startedAt = 0; // We have to defer unsetting startedAt because status line depends on it
 	}
 
 	public getDir() {
