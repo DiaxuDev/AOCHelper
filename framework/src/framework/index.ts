@@ -1,4 +1,4 @@
-import { existsSync, FSWatcher, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PuzzleIdentifier, type AOCConfig } from "@/types";

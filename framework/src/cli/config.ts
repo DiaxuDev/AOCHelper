@@ -7,7 +7,7 @@ import { createJiti } from "jiti";
 const defaultConfig: AOCConfig = {
 	root: join(process.cwd(), "solutions"),
 	year: new Date().getFullYear(),
-	defaultRunMode: "test",
+	defaultRunMode: "auto",
 };
 
 const configFileName = "aoc.config.ts";

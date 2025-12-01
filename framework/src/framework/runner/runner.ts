@@ -1,10 +1,8 @@
 import { ChildProcess, fork } from "node:child_process";
-import { clear } from "node:console";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Framework, PuzzleIdentifier } from "@/index";
-import c from "tinyrainbow";
 
 import { DIST_DIR } from "../constants";
 import { WorkerMessage, WorkerRequest } from "./worker/types";
@@ -28,15 +26,23 @@ export class Runner {
 
 	private worker?: ChildProcess;
 	private timerInterval?: NodeJS.Timeout;
+	private resolveCompletionPromise?: () => void;
 
-	constructor(ctx: Framework, puzzle: PuzzleIdentifier) {
+	constructor(ctx: Framework, puzzle: PuzzleIdentifier, testMode?: boolean) {
 		this.ctx = ctx;
-		this.testMode = ctx.config.defaultRunMode === "test";
 		this.puzzle = puzzle;
 		this.path = join(
 			`day${this.puzzle.day.toString().padStart(2, "0")}`,
 			`./part${this.puzzle.part === 1 ? "One" : "Two"}.ts`,
 		);
+
+		if (testMode) {
+			this.testMode = testMode;
+		} else if (this.ctx.config.defaultRunMode === "auto") {
+			this.testMode = this.ctx.keepAlive;
+		} else {
+			this.testMode = this.ctx.config.defaultRunMode === "test";
+		}
 	}
 
 	public async init() {
@@ -89,7 +95,7 @@ export class Runner {
 
 		this.testMode = newTestMode;
 		await this.loadInput();
-		this.run();
+		void this.run();
 	}
 
 	public async loadInput() {
@@ -118,6 +124,12 @@ export class Runner {
 
 		const msg: WorkerRequest = { type: "run", data: { input: this.input, path: "./" + this.path } };
 		this.worker.send(msg);
+
+		if (!this.ctx.keepAlive) {
+			await new Promise<void>((resolve) => {
+				this.resolveCompletionPromise = resolve;
+			});
+		}
 	}
 
 	private onWorkerMessage(message: WorkerMessage) {
@@ -131,8 +143,14 @@ export class Runner {
 		}
 
 		this.state = RunnerState.STARTED;
-		this.ctx.logger.updateStatusLine();
+		if (this.ctx.keepAlive) this.ctx.logger.updateStatusLine();
+		else this.ctx.logger.log(this.ctx.logger.getStatusLine());
 		this.startedAt = 0; // We have to defer unsetting startedAt because status line depends on it
+
+		if (this.resolveCompletionPromise) {
+			this.resolveCompletionPromise();
+			this.resolveCompletionPromise = undefined;
+		}
 	}
 
 	public getDir() {

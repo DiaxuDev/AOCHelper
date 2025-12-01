@@ -16,7 +16,7 @@ import {
 	SHOW_CURSOR,
 } from "../constants";
 import { RunnerState } from "../runner/runner";
-import { formatTime } from "../utils";
+import { assert, formatTime } from "../utils";
 
 export class Logger {
 	private ctx: Framework;
@@ -37,7 +37,7 @@ export class Logger {
 
 			this.updateStatusLine();
 
-			ctx.addExitHook(() => this.log(c.red("Exiting...")));
+			if (this.ctx.keepAlive) ctx.addExitHook(() => this.log(c.red("Exiting...")));
 		}
 		this.registerExitHandlers();
 		this.registerUnhandledRejectionHandler();
@@ -54,6 +54,14 @@ export class Logger {
 	public updateStatusLine() {
 		if (!this.stdout.isTTY || !this.ctx.runner) return;
 
+		this.stdout.write(
+			SAVE_CURSOR + CURSOR_TO(this.stdout.rows, 0) + this.getStatusLine() + CLEAR_TO_END + RESTORE_CURSOR,
+		);
+	}
+
+	public getStatusLine(): string {
+		assert(this.ctx.runner !== undefined, "Logger:getStatusLine");
+
 		const icon = this.ctx.runner.state === RunnerState.RUNNING ? c.green("\u25B6") : c.dim("\u23F8");
 
 		const time =
@@ -64,9 +72,9 @@ export class Logger {
 
 		const answer = this.ctx.runner.answer !== null ? "Answer: " + c.green(this.ctx.runner.answer) : "";
 
-		const message = icon + " " + [time, mode, answer].filter((part) => part.length > 0).join(c.dim(" | "));
-
-		this.stdout.write(SAVE_CURSOR + CURSOR_TO(this.stdout.rows, 0) + message + CLEAR_TO_END + RESTORE_CURSOR);
+		return (
+			(this.ctx.keepAlive ? icon + " " : "") + [time, mode, answer].filter((part) => part.length > 0).join(c.dim(" | "))
+		);
 	}
 
 	private registerExitHandlers() {
@@ -85,6 +93,7 @@ export class Logger {
 
 		const onExit = (code: number) => {
 			cleanup();
+
 			process.exitCode = code;
 			process.exit();
 		};
