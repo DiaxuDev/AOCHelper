@@ -35,6 +35,25 @@ export class Framework {
 		return await fetch(new URL(path, BASE_URL), opt);
 	}
 
+	public async downloadInput(day: number, path?: string) {
+		if (!Number.isInteger(day) || day < 1 || day > 25) {
+			this.logger.error("Day must be an integer between 1 and 25");
+			return;
+		}
+
+		const inputResponse = await this.fetch(`/${this.config.year}/day/${day}/input`);
+		if (!inputResponse.ok) {
+			this.logger.error(`Failed to fetch input for day ${day}. Status: ${inputResponse.status}`);
+			return;
+		}
+
+		path ??= join(this.ensureEffectiveRoot(), `day${day.toString().padStart(2, "0")}`);
+
+		const input = await inputResponse.text();
+		await writeFile(join(path, "input.txt"), input.trim());
+		this.logger.log(`Fetched and saved input`);
+	}
+
 	public async bootstrap(day: number) {
 		if (!Number.isInteger(day) || day < 1 || day > 25) {
 			this.logger.error("Day must be an integer between 1 and 25");
@@ -52,19 +71,10 @@ export class Framework {
 		await mkdir(path);
 		this.logger.log(`Created directory: ${path}`);
 
-		const inputResponse = await this.fetch(`/${this.config.year}/day/${day}/input`);
-		if (!inputResponse.ok) {
-			this.logger.error(`Failed to fetch input for day ${day}. Status: ${inputResponse.status}`);
-			return;
-		}
-
-		const input = await inputResponse.text();
-		await writeFile(join(path, "input.txt"), input.trim());
+		await this.downloadInput(day, path);
 
 		await copyFile(join(DIST_DIR, "templates/day.ts"), join(path, "partOne.ts"));
 		await copyFile(join(DIST_DIR, "templates/day.ts"), join(path, "partTwo.ts"));
-
-		this.logger.log(`Fetched and saved input`);
 	}
 
 	public async run(puzzle: PuzzleIdentifier, watchMode: boolean = false) {

@@ -17,6 +17,10 @@ function createCLI() {
 		.action((day) => runAction((ctx) => ctx.bootstrap(parseInt(day, 10))));
 
 	cli
+		.command("download <input>", "Force redownload of the input file")
+		.action((day) => runAction((ctx) => ctx.downloadInput(parseInt(day, 10))));
+
+	cli
 		.command("run <day> <part>", "Run a specific day's part")
 		.option("--test", "Runs code in test mode")
 		.option("--real", "Runs code in real mode")
