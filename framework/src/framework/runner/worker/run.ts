@@ -7,12 +7,13 @@ import { setRunnerState } from "..";
 import { WorkerRunData } from "./types";
 
 export type RunnerState = {
+	testMode: boolean | null;
 	input: string | null;
 	answer: number | null;
 };
 
 let jiti: Jiti | undefined;
-const state: RunnerState = { input: null, answer: null };
+const state: RunnerState = { input: null, answer: null, testMode: null };
 
 export function setupRunner(ctx: { basePath: string }) {
 	setRunnerState(state);
@@ -24,6 +25,7 @@ export function setupRunner(ctx: { basePath: string }) {
 export async function run(data: WorkerRunData): Promise<number> {
 	assert(jiti, "Runner.run:jiti");
 
+	state.testMode = data.testMode;
 	state.input = data.input;
 	state.answer = null;
 

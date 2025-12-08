@@ -1,6 +1,7 @@
 export type WorkerRunData = {
 	input: string;
 	path: string;
+	testMode: boolean;
 };
 
 export type WorkerRequest =

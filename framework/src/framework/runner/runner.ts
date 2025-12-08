@@ -122,7 +122,10 @@ export class Runner {
 
 		this.timerInterval = setInterval(() => this.ctx.logger.updateStatusLine(), 100).unref();
 
-		const msg: WorkerRequest = { type: "run", data: { input: this.input, path: "./" + this.path } };
+		const msg: WorkerRequest = {
+			type: "run",
+			data: { input: this.input, path: "./" + this.path, testMode: this.testMode },
+		};
 		this.worker.send(msg);
 
 		if (!this.ctx.keepAlive) {
