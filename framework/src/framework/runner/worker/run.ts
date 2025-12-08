@@ -31,6 +31,7 @@ export async function run(data: WorkerRunData): Promise<number> {
 		await jiti.import(data.path);
 	} catch (error) {
 		console.log("Error during execution:", error);
+		return 0;
 	}
 
 	assert(state.answer !== null, "Runner.run:answer");
