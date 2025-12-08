@@ -51,6 +51,7 @@ export class Framework {
 
 		const input = await inputResponse.text();
 		await writeFile(join(path, "input.txt"), input.trim());
+		await writeFile(join(path, "input.test.txt"), "");
 		this.logger.log(`Fetched and saved input`);
 	}
 
